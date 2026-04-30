@@ -9,11 +9,12 @@
 <link rel="stylesheet" type="text/css" href="css/animsition.css" />
 <link rel="stylesheet" type="text/css" href="css/custom_auth.css" />
 </head>
+
 <body>
    <div class="wp animsition">
         <div class="boardLogin" id="loginPanel">
             <a href="#" class="logo"><h1>短时停车需求平台</h1></a>
-            <form>
+            <form onsubmit="return false;">
                 <div class="inpGroup">
                     <span class="loginIco1"></span>
                     <input type="text" id="username" placeholder="请输入您的用户名" autocomplete="off">
@@ -32,7 +33,7 @@
 
         <div class="boardLogin hidden-panel" id="registerPanel">
             <a href="#" class="logo"><h1>用户注册</h1></a>
-            <form>
+            <form onsubmit="return false;">
                 <div class="inpGroup">
                     <span class="loginIco1"></span>
                     <input type="text" id="regUser" placeholder="请设置用户名" autocomplete="off">
@@ -48,7 +49,7 @@
 
         <div class="boardLogin hidden-panel" id="forgetPanel">
             <a href="#" class="logo"><h1>重置密码</h1></a>
-            <form>
+            <form onsubmit="return false;">
                 <div class="inpGroup">
                     <span class="loginIco1"></span>
                     <input type="text" id="forgetUser" placeholder="请输入您的用户名">
@@ -66,14 +67,13 @@
             </form>
         </div>
     </div>
-</body>
 
 <script type="text/javascript" src="js/jquery.min.js"></script>
 <script type="text/javascript" src="js/jquery.animsition.js"></script>
 <script src="js/particles.min.js"></script>
 <script src="js/app.js"></script>
+
 <script type="text/javascript">
-    // 初始化原本的动画效果
     $(".animsition").animsition({
         inClass: 'fade-in',
         outClass: 'fade-out',
@@ -89,26 +89,29 @@
         overlayParentElement: 'body'
     });
 
-    // 【核心修改点】现在它会去求助后端，而不是自言自语了
     function redirectBasedOnUsername() {
-        var u = $("#username").val();
-        var p = $("#password").val();
+        var u = $("#username").val().trim();
+        var p = $("#password").val().trim();
 
-        if(!u || !p) return alert("请输入用户名和密码");
+        if (!u || !p) {
+            alert("请输入用户名和密码");
+            return;
+        }
 
         $.ajax({
-            url: 'http://localhost:8080/user/login', 
+            url: 'http://localhost:8080/user/login',
             type: 'POST',
             contentType: 'application/json',
-            data: JSON.stringify({ username: u, password: p }),
+            data: JSON.stringify({
+                username: u,
+                password: p
+            }),
             success: function(res) {
                 if (res.code === 1) {
                     alert("登录成功！");
-                    // 注意这里的路径：
-                    // 如果 index.html 在根目录，直接写 'User/user.html'
-                    // 如果 index.html 在 Login 文件夹里，用 '../User/user.html'
+
                     if (u === 'admin') {
-                        window.location.href = '../User/admin.html'; 
+                        window.location.href = '../User/admin.html';
                     } else {
                         window.location.href = '../User/user.html';
                     }
@@ -122,70 +125,90 @@
         });
     }
 
-    // 2. 切换面板逻辑（保持不变）
     function switchTo(panelId) {
-        $(".boardLogin").fadeOut(200);
+        $(".boardLogin").stop(true, true).fadeOut(200);
+
         setTimeout(function() {
-            $("#" + panelId).fadeIn(300);
+            $("#" + panelId).stop(true, true).fadeIn(300);
         }, 200);
     }
 
-    // 3. 注册逻辑（保持不变）
-    function handleForget() {
-    var u = $("#forgetUser").val();
-    var s = $("#securityCode").val();
-    var n = $("#newPass").val();
+    function handleRegister() {
+        var u = $("#regUser").val().trim();
+        var p = $("#regPass").val().trim();
 
-    // 4. 注册逻辑：把数据发送给后端
-    
-    var u = $("#regUser").val();
-    var p = $("#regPass").val();
+        if (!u || !p) {
+            alert("请设置用户名和密码");
+            return;
+        }
 
-    if(!u || !p) return alert("请设置用户名和密码");
-
-    $.ajax({
-        url: 'http://localhost:8080/user/register', // 这里对应你后端的注册接口
-        type: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify({ 
-            username: u, 
-            password: p 
-        }),
-        success: function(res) {
-            // 假设后端返回 code 为 1 表示成功
-            if(res.code === 1) {
-                alert("注册成功，请登录！");
-                switchTo('loginPanel'); // 注册成功后跳回登录界面
-            } else {
-                alert(res.msg || "注册失败，用户名可能已存在");
+        $.ajax({
+            url: 'http://localhost:8080/user/register',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                username: u,
+                password: p
+            }),
+            success: function(res) {
+                if (res.code === 1) {
+                    alert("注册成功，请登录！");
+                    $("#username").val(u);
+                    $("#password").val("");
+                    $("#regUser").val("");
+                    $("#regPass").val("");
+                    switchTo('loginPanel');
+                } else {
+                    alert(res.msg || "注册失败，用户名可能已存在");
+                }
+            },
+            error: function() {
+                alert("后端连接失败，请检查 IDEA 是否启动了 /user/register 接口");
             }
-        },
-        error: function() { 
-            alert("后端连接失败，请检查 IDEA 是否启动了 /user/register 接口"); 
+        });
+    }
+
+    function handleForget() {
+        var u = $("#forgetUser").val().trim();
+        var s = $("#securityCode").val().trim();
+        var n = $("#newPass").val().trim();
+
+        if (!u || !s || !n) {
+            alert("请完整填写用户名、安全验证码和新密码");
+            return;
         }
-    });
-}
 
-function handleRegister() {
-    // 关键：这里必须先定义 u 和 p，才能在下面使用！
-    var u = $("#regUser").val(); 
-    var p = $("#regPass").val();
-
-    if(!u || !p) return alert("请设置用户名和密码");
-
-    $.ajax({
-        url: 'http://localhost:8080/user/register',
-        type: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify({ 
-            username: u, // 这里的 u 必须对应上面定义的 var u
-            password: p  // 这里的 p 必须对应上面定义的 var p
-        }),
-        success: function(res) {
-            // ... 后续逻辑 ...
+        if (s !== "2026") {
+            alert("安全验证码错误");
+            return;
         }
-    });
-}
-   
+
+        $.ajax({
+            url: 'http://localhost:8080/user/resetPassword',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                username: u,
+                password: n
+            }),
+            success: function(res) {
+                if (res.code === 1) {
+                    alert("密码重置成功，请重新登录！");
+                    $("#username").val(u);
+                    $("#password").val("");
+                    $("#forgetUser").val("");
+                    $("#securityCode").val("");
+                    $("#newPass").val("");
+                    switchTo('loginPanel');
+                } else {
+                    alert(res.msg || "密码重置失败");
+                }
+            },
+            error: function() {
+                alert("后端连接失败，请检查是否提供了 /user/resetPassword 接口");
+            }
+        });
+    }
 </script>
+</body>
 </html>
