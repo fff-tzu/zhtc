@@ -1,0 +1,25 @@
+#FontScroll{
+    height: 730px;
+}
+#rightBottom {
+    display: none;
+}
+.settings-box #list {
+    display: block;
+    margin-top: 20px;
+    margin-left: 30px;
+}
+.settings-box .gun span {
+    width: 80px;
+    margin-left: 20px;
+    font-size: 20px;
+}
+.settings-box .fontInner span {
+    margin-top: 10px;
+    margin-left: -35px;
+    margin-right: 10px;
+    width: 150px;
+}
+
+
+

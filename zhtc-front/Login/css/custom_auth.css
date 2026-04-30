@@ -1,0 +1,43 @@
+/* 底部链接容器 */
+.auth-options {
+    margin-top: 25px;
+    text-align: center;
+}
+
+.auth-options a {
+    /* 初始状态：改为白色，增加一点点透明度使其不那么刺眼 */
+    color: rgba(255, 255, 255, 0.9);
+    text-decoration: none;
+    font-size: 14px;
+    margin: 0 15px;
+    cursor: pointer;
+    padding: 5px 10px;
+    transition: all 0.3s ease; /* 顺滑过渡 */
+}
+
+/* Hover 效果：模仿登录按钮的科技蓝色发光 */
+.auth-options a:hover {
+    color: #00d2ff; /* 变为品牌蓝 */
+    text-shadow: 0 0 15px #00d2ff, 0 0 5px #fff; /* 增加发光感 */
+    transform: translateY(-2px); /* 轻微浮动感 */
+}
+
+/* 隐藏面板样式保持不变 */
+.hidden-panel {
+    display: none;
+}
+
+/* 返回登录按钮也统一成白色初始态 */
+.back-to-login {
+    display: block;
+    margin-top: 15px;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 13px;
+    cursor: pointer;
+    text-align: center;
+}
+
+.back-to-login:hover {
+    color: #00d2ff;
+    text-decoration: underline;
+}

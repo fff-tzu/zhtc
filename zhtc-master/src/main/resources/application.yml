@@ -1,0 +1,7 @@
+spring:
+  datasource:
+    # 这里的 zhtc_db 必须和你刚才在 SQL 里创建的名字一模一样
+    url: jdbc:mysql://localhost:3306/zhtc_db?serverTimezone=UTC&useUnicode=true&characterEncoding=utf-8
+    username: root
+    password: SXR20060826  
+    driver-class-name: com.mysql.cj.jdbc.Driver

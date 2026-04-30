@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>停车路线引导图</title>
+  <style>
+    html, body, #map {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+
+    .route-card {
+      font-size: 13px;
+      line-height: 1.8;
+    }
+
+    .route-card b {
+      color: #0a84ff;
+    }
+
+    .start-icon,
+    .park-icon {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255,255,255,0.96);
+      box-shadow: 0 0 12px rgba(10,132,255,0.45);
+      font-size: 18px;
+    }
+
+    .start-icon {
+      border: 2px solid #00d4ff;
+    }
+
+    .park-icon {
+      border: 2px solid #0a84ff;
+    }
+  </style>
+
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css">
+</head>
+
+<body>
+<div id="map"></div>
+
+<script>
+  var map = L.map('map').setView([22.525, 113.952], 13);
+
+  L.tileLayer(
+    'https://wprd01.is.autonavi.com/appmaptile?x={x}&y={y}&z={z}&lang=zh_cn&size=1&scl=1&style=7',
+    {
+      attribution: '高德地图',
+      maxZoom: 18
+    }
+  ).addTo(map);
+
+  var startIcon = L.divIcon({
+    className: '',
+    html: '<div class="start-icon">📍</div>',
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    popupAnchor: [0, -15]
+  });
+
+  var parkIcon = L.divIcon({
+    className: '',
+    html: '<div class="park-icon">🅿️</div>',
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    popupAnchor: [0, -15]
+  });
+
+  var params = new URLSearchParams(window.location.search);
+  var targetId = Number(params.get('parking_id')) || 4;
+  var currentTime = params.get('time') || '12:00';
+
+  var startPoint = {
+    name: '深圳湾公园游客入口',
+    lat: 22.5240,
+    lng: 113.9510
+  };
+
+  Promise.all([
+    fetch('../json/parking_base.json').then(function(res) {
+      return res.json();
+    }),
+    fetch('../json/parking_prediction_simulated.json').then(function(res) {
+      return res.json();
+    })
+  ]).then(function(result) {
+    var baseData = result[0];
+    var predData = result[1];
+
+    var target = baseData.find(function(item) {
+      return Number(item.id) === Number(targetId);
+    });
+
+    if (!target) {
+      target = baseData[0];
+    }
+
+    var pred = predData.find(function(item) {
+      return Number(item.parking_id) === Number(target.id) && item.time === currentTime;
+    });
+
+    if (!pred) {
+      pred = {
+        available: '--',
+        risk: '--',
+        occupancy_rate: 0,
+        prediction: '--'
+      };
+    }
+
+    var routeLine = [
+      [startPoint.lat, startPoint.lng],
+      [
+        (startPoint.lat + Number(target.lat)) / 2 + 0.001,
+        (startPoint.lng + Number(target.lng)) / 2
+      ],
+      [Number(target.lat), Number(target.lng)]
+    ];
+
+    L.marker([startPoint.lat, startPoint.lng], { icon: startIcon })
+      .addTo(map)
+      .bindPopup(
+        '<div class="route-card"><b>起点</b><br>' +
+        startPoint.name +
+        '</div>'
+      );
+
+    L.marker([Number(target.lat), Number(target.lng)], { icon: parkIcon })
+      .addTo(map)
+      .bindPopup(
+        '<div class="route-card">' +
+        '<b>推荐停车场</b><br>' +
+        target.name + '<br>' +
+        '推荐时段：' + currentTime + '<br>' +
+        '剩余车位：' + pred.available + '<br>' +
+        '风险等级：' + pred.risk + '<br>' +
+        '占用率：' + Math.round(Number(pred.occupancy_rate || 0) * 100) + '%<br>' +
+        '预测需求：' + pred.prediction + '<br>' +
+        '推荐理由：该停车场剩余车位较充足、拥堵风险较低，且距离适中，综合评分最优。' +
+        '</div>'
+      )
+      .openPopup();
+
+    L.polyline(routeLine, {
+      color: '#0a84ff',
+      weight: 5,
+      opacity: 0.9
+    }).addTo(map);
+
+    L.circleMarker(routeLine[1], {
+      radius: 6,
+      color: '#00d4ff',
+      fillColor: '#00d4ff',
+      fillOpacity: 0.85
+    }).addTo(map).bindPopup(
+      '<div class="route-card"><b>途经点</b><br>智能推荐路线示意</div>'
+    );
+
+    map.fitBounds(routeLine, {
+      padding: [60, 60]
+    });
+
+  }).catch(function(error) {
+    console.error('路线图数据加载失败：', error);
+  });
+</script>
+</body>
+</html>

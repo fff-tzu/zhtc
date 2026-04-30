@@ -1,0 +1,191 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="initial-scale=1.0, user-scalable=no, width=device-width">
+<title>登录页面</title>
+<link rel="stylesheet" type="text/css" href="css/reset.css" />
+<link rel="stylesheet" type="text/css" href="css/scanboardLogin.css" />
+<link rel="stylesheet" type="text/css" href="css/animsition.css" />
+<link rel="stylesheet" type="text/css" href="css/custom_auth.css" />
+</head>
+<body>
+   <div class="wp animsition">
+        <div class="boardLogin" id="loginPanel">
+            <a href="#" class="logo"><h1>短时停车需求平台</h1></a>
+            <form>
+                <div class="inpGroup">
+                    <span class="loginIco1"></span>
+                    <input type="text" id="username" placeholder="请输入您的用户名" autocomplete="off">
+                </div>
+                <div class="inpGroup">
+                    <span class="loginIco2"></span>
+                    <input type="password" id="password" placeholder="请输入您的密码">
+                </div>
+                <a onclick="redirectBasedOnUsername()" class="submit" style="cursor:pointer;">登录</a>
+                <div class="auth-options">
+                    <a onclick="switchTo('registerPanel')">立即注册</a>
+                    <a onclick="switchTo('forgetPanel')">忘记密码</a>
+                </div>
+            </form>
+        </div>
+
+        <div class="boardLogin hidden-panel" id="registerPanel">
+            <a href="#" class="logo"><h1>用户注册</h1></a>
+            <form>
+                <div class="inpGroup">
+                    <span class="loginIco1"></span>
+                    <input type="text" id="regUser" placeholder="请设置用户名" autocomplete="off">
+                </div>
+                <div class="inpGroup">
+                    <span class="loginIco2"></span>
+                    <input type="password" id="regPass" placeholder="请设置密码">
+                </div>
+                <a onclick="handleRegister()" class="submit" style="cursor:pointer;">确认注册</a>
+                <a onclick="switchTo('loginPanel')" class="back-to-login">返回登录</a>
+            </form>
+        </div>
+
+        <div class="boardLogin hidden-panel" id="forgetPanel">
+            <a href="#" class="logo"><h1>重置密码</h1></a>
+            <form>
+                <div class="inpGroup">
+                    <span class="loginIco1"></span>
+                    <input type="text" id="forgetUser" placeholder="请输入您的用户名">
+                </div>
+                <div class="inpGroup">
+                    <span class="loginIco1"></span>
+                    <input type="text" id="securityCode" placeholder="请输入安全验证码: 2026">
+                </div>
+                <div class="inpGroup">
+                    <span class="loginIco2"></span>
+                    <input type="password" id="newPass" placeholder="请输入新密码">
+                </div>
+                <a onclick="handleForget()" class="submit" style="cursor:pointer;">确认重置</a>
+                <a onclick="switchTo('loginPanel')" class="back-to-login">返回登录</a>
+            </form>
+        </div>
+    </div>
+</body>
+
+<script type="text/javascript" src="js/jquery.min.js"></script>
+<script type="text/javascript" src="js/jquery.animsition.js"></script>
+<script src="js/particles.min.js"></script>
+<script src="js/app.js"></script>
+<script type="text/javascript">
+    // 初始化原本的动画效果
+    $(".animsition").animsition({
+        inClass: 'fade-in',
+        outClass: 'fade-out',
+        inDuration: 800,
+        outDuration: 1000,
+        linkElement: '.animsition-link',
+        loading: false,
+        loadingParentElement: 'body',
+        loadingClass: 'animsition-loading',
+        unSupportCss: ['animation-duration', '-webkit-animation-duration', '-o-animation-duration'],
+        overlay: false,
+        overlayClass: 'animsition-overlay-slide',
+        overlayParentElement: 'body'
+    });
+
+    // 【核心修改点】现在它会去求助后端，而不是自言自语了
+    function redirectBasedOnUsername() {
+        var u = $("#username").val();
+        var p = $("#password").val();
+
+        if(!u || !p) return alert("请输入用户名和密码");
+
+        $.ajax({
+            url: 'http://localhost:8080/user/login', 
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ username: u, password: p }),
+            success: function(res) {
+                if (res.code === 1) {
+                    alert("登录成功！");
+                    // 注意这里的路径：
+                    // 如果 index.html 在根目录，直接写 'User/user.html'
+                    // 如果 index.html 在 Login 文件夹里，用 '../User/user.html'
+                    if (u === 'admin') {
+                        window.location.href = '../User/admin.html'; 
+                    } else {
+                        window.location.href = '../User/user.html';
+                    }
+                } else {
+                    alert(res.msg || "用户名或密码错误");
+                }
+            },
+            error: function() {
+                alert("后端未连接，请检查 IDEA 是否正在运行");
+            }
+        });
+    }
+
+    // 2. 切换面板逻辑（保持不变）
+    function switchTo(panelId) {
+        $(".boardLogin").fadeOut(200);
+        setTimeout(function() {
+            $("#" + panelId).fadeIn(300);
+        }, 200);
+    }
+
+    // 3. 注册逻辑（保持不变）
+    function handleForget() {
+    var u = $("#forgetUser").val();
+    var s = $("#securityCode").val();
+    var n = $("#newPass").val();
+
+    // 4. 注册逻辑：把数据发送给后端
+    
+    var u = $("#regUser").val();
+    var p = $("#regPass").val();
+
+    if(!u || !p) return alert("请设置用户名和密码");
+
+    $.ajax({
+        url: 'http://localhost:8080/user/register', // 这里对应你后端的注册接口
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ 
+            username: u, 
+            password: p 
+        }),
+        success: function(res) {
+            // 假设后端返回 code 为 1 表示成功
+            if(res.code === 1) {
+                alert("注册成功，请登录！");
+                switchTo('loginPanel'); // 注册成功后跳回登录界面
+            } else {
+                alert(res.msg || "注册失败，用户名可能已存在");
+            }
+        },
+        error: function() { 
+            alert("后端连接失败，请检查 IDEA 是否启动了 /user/register 接口"); 
+        }
+    });
+}
+
+function handleRegister() {
+    // 关键：这里必须先定义 u 和 p，才能在下面使用！
+    var u = $("#regUser").val(); 
+    var p = $("#regPass").val();
+
+    if(!u || !p) return alert("请设置用户名和密码");
+
+    $.ajax({
+        url: 'http://localhost:8080/user/register',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ 
+            username: u, // 这里的 u 必须对应上面定义的 var u
+            password: p  // 这里的 p 必须对应上面定义的 var p
+        }),
+        success: function(res) {
+            // ... 后续逻辑 ...
+        }
+    });
+}
+   
+</script>
+</html>

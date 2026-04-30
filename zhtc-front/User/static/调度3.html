@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>智慧停车分流调度地图</title>
+
+  <style>
+    html, body, #map {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      overflow: hidden;
+      font-family: "Microsoft YaHei", Arial, sans-serif;
+    }
+
+    .dispatch-panel {
+      position: absolute;
+      left: 16px;
+      top: 16px;
+      z-index: 999;
+      width: 310px;
+      background: rgba(4, 13, 26, 0.9);
+      color: #e8f4ff;
+      border: 1px solid rgba(0, 212, 255, 0.35);
+      border-radius: 10px;
+      padding: 14px 16px;
+      box-shadow: 0 0 18px rgba(0, 212, 255, 0.18);
+    }
+
+    .dispatch-title {
+      font-size: 16px;
+      font-weight: bold;
+      color: #00d4ff;
+      margin-bottom: 8px;
+    }
+
+    .dispatch-subtitle {
+      font-size: 12px;
+      color: #7eb8d4;
+      line-height: 1.7;
+      margin-bottom: 10px;
+    }
+
+    .dispatch-item {
+      padding: 8px 0;
+      border-top: 1px solid rgba(0, 212, 255, 0.15);
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .dispatch-item strong {
+      color: #ffd060;
+    }
+
+    .legend {
+      position: absolute;
+      right: 16px;
+      bottom: 16px;
+      z-index: 999;
+      background: rgba(4, 13, 26, 0.9);
+      color: #e8f4ff;
+      padding: 12px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1.8;
+      border: 1px solid rgba(0, 212, 255, 0.35);
+      box-shadow: 0 0 16px rgba(0, 212, 255, 0.18);
+    }
+
+    .legend-title {
+      color: #00d4ff;
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+
+    .dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+
+    .dot-source {
+      background: #f87171;
+    }
+
+    .dot-target {
+      background: #34d399;
+    }
+
+    .source-icon,
+    .target-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 0 14px rgba(0, 212, 255, 0.35);
+      font-size: 18px;
+      font-weight: bold;
+    }
+
+    .source-icon {
+      border: 3px solid #f87171;
+    }
+
+    .target-icon {
+      border: 3px solid #34d399;
+    }
+
+    .popup-card {
+      font-size: 13px;
+      line-height: 1.8;
+    }
+
+    .popup-card h4 {
+      margin: 0 0 6px;
+      color: #0a84ff;
+      font-size: 14px;
+    }
+
+    .popup-card .danger {
+      color: #f87171;
+      font-weight: bold;
+    }
+
+    .popup-card .safe {
+      color: #34d399;
+      font-weight: bold;
+    }
+  </style>
+
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css">
+</head>
+
+<body>
+<div id="map"></div>
+
+<div class="dispatch-panel">
+  <div class="dispatch-title" id="panel-title">智慧停车分流调度总览</div>
+  <div class="dispatch-subtitle" id="panel-subtitle">
+    系统根据停车场占用率、剩余车位和风险等级，自动生成高风险停车场向低风险停车场的动态分流方案。
+  </div>
+  <div id="dispatch-list"></div>
+</div>
+
+<div class="legend">
+  <div class="legend-title">调度图例</div>
+  <div><span class="dot dot-source"></span>红色：高风险停车场 / 分流源</div>
+  <div><span class="dot dot-target"></span>绿色：推荐停车场 / 分流目标</div>
+  <div>蓝色路线：建议分流引导路线</div>
+</div>
+
+<script>
+  var map = L.map('map').setView([22.535, 113.93], 13);
+
+  L.tileLayer(
+    'https://wprd01.is.autonavi.com/appmaptile?x={x}&y={y}&z={z}&lang=zh_cn&size=1&scl=1&style=7',
+    {
+      attribution: '高德地图',
+      maxZoom: 18
+    }
+  ).addTo(map);
+
+  var sourceIcon = L.divIcon({
+    className: '',
+    html: '<div class="source-icon">⚠️</div>',
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+    popupAnchor: [0, -17]
+  });
+
+  var targetIcon = L.divIcon({
+    className: '',
+    html: '<div class="target-icon">🅿️</div>',
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+    popupAnchor: [0, -17]
+  });
+
+  /*
+    分流方案说明：
+    sourceId：高风险停车场
+    targetId：推荐分流停车场
+    vehicles：建议分流车辆数
+    distance：模拟引导距离
+  */
+  var dispatchSchemes = [
+    {
+      id: 1,
+      sourceId: 7,
+      targetId: 4,
+      vehicles: 26,
+      distance: '3.8km',
+      reason: '源停车场占用率高，目标停车场容量大、剩余车位充足。'
+    },
+    {
+      id: 2,
+      sourceId: 6,
+      targetId: 5,
+      vehicles: 18,
+      distance: '4.2km',
+      reason: '源停车场剩余车位不足，目标停车场距离适中且风险较低。'
+    },
+    {
+      id: 3,
+      sourceId: 11,
+      targetId: 24,
+      vehicles: 12,
+      distance: '5.1km',
+      reason: '小型停车场接近满载，建议向大型停车场分流。'
+    },
+    {
+      id: 4,
+      sourceId: 17,
+      targetId: 23,
+      vehicles: 9,
+      distance: '4.7km',
+      reason: '儿童公园北门停车场容量较小，高峰期需要提前引导。'
+    },
+    {
+      id: 5,
+      sourceId: 29,
+      targetId: 8,
+      vehicles: 15,
+      distance: '6.3km',
+      reason: '东湖公园西门停车场高风险，阳台山停车场剩余空间较大。'
+    }
+  ];
+
+  function getCurrentTime() {
+    var hour = new Date().getHours();
+    if (hour < 10) return '08:00';
+    if (hour < 15) return '12:00';
+    return '18:00';
+  }
+
+  function getPageMode() {
+    var fileName = decodeURIComponent(window.location.pathname.split('/').pop());
+
+    if (fileName.indexOf('调度1') !== -1) return 1;
+    if (fileName.indexOf('调度2') !== -1) return 2;
+    if (fileName.indexOf('调度3') !== -1) return 3;
+    if (fileName.indexOf('调度4') !== -1) return 4;
+    if (fileName.indexOf('调度5') !== -1) return 5;
+
+    return 'all';
+  }
+
+  function findParking(baseData, id) {
+    return baseData.find(function(item) {
+      return Number(item.id) === Number(id);
+    });
+  }
+
+  function findPrediction(predData, parkingId, time) {
+    return predData.find(function(item) {
+      return Number(item.parking_id) === Number(parkingId) && item.time === time;
+    });
+  }
+
+  function formatRate(rate) {
+    return Math.round(Number(rate || 0) * 100) + '%';
+  }
+
+  function makePopup(type, parking, pred, scheme) {
+    var typeText = type === 'source' ? '分流源停车场' : '推荐目标停车场';
+    var riskClass = type === 'source' ? 'danger' : 'safe';
+
+    return (
+      '<div class="popup-card">' +
+      '<h4>' + typeText + '</h4>' +
+      '<div><b>' + parking.name + '</b></div>' +
+      '<div>所属公园：' + parking.park + '</div>' +
+      '<div>总泊位数：' + parking.capacity + '</div>' +
+      '<div>当前剩余车位：' + (pred ? pred.available : '--') + '</div>' +
+      '<div>当前占用率：' + (pred ? formatRate(pred.occupancy_rate) : '--') + '</div>' +
+      '<div>风险等级：<span class="' + riskClass + '">' + (pred ? pred.risk : '--') + '</span></div>' +
+      '<div>预测需求：' + (pred ? pred.prediction : '--') + '</div>' +
+      '<div>分流车辆数：' + scheme.vehicles + ' 辆</div>' +
+      '<div>引导距离：' + scheme.distance + '</div>' +
+      '</div>'
+    );
+  }
+
+  function drawScheme(scheme, baseData, predData, currentTime, bounds) {
+    var source = findParking(baseData, scheme.sourceId);
+    var target = findParking(baseData, scheme.targetId);
+
+    if (!source || !target) return;
+
+    var sourcePred = findPrediction(predData, source.id, currentTime);
+    var targetPred = findPrediction(predData, target.id, currentTime);
+
+    var sourcePoint = [Number(source.lat), Number(source.lng)];
+    var targetPoint = [Number(target.lat), Number(target.lng)];
+
+    var midPoint = [
+      (sourcePoint[0] + targetPoint[0]) / 2 + 0.003,
+      (sourcePoint[1] + targetPoint[1]) / 2
+    ];
+
+    L.marker(sourcePoint, { icon: sourceIcon })
+      .addTo(map)
+      .bindPopup(makePopup('source', source, sourcePred, scheme));
+
+    L.marker(targetPoint, { icon: targetIcon })
+      .addTo(map)
+      .bindPopup(makePopup('target', target, targetPred, scheme));
+
+    L.polyline([sourcePoint, midPoint, targetPoint], {
+      color: '#0a84ff',
+      weight: 5,
+      opacity: 0.88,
+      dashArray: '10, 8'
+    }).addTo(map).bindPopup(
+      '<div class="popup-card">' +
+      '<h4>分流路线 ' + scheme.id + '</h4>' +
+      '<div>从：' + source.name + '</div>' +
+      '<div>到：' + target.name + '</div>' +
+      '<div>建议分流：' + scheme.vehicles + ' 辆</div>' +
+      '<div>引导距离：' + scheme.distance + '</div>' +
+      '<div>方案理由：' + scheme.reason + '</div>' +
+      '</div>'
+    );
+
+    bounds.push(sourcePoint);
+    bounds.push(targetPoint);
+  }
+
+  function renderPanel(schemes, baseData) {
+    var list = document.getElementById('dispatch-list');
+    list.innerHTML = '';
+
+    schemes.forEach(function(scheme) {
+      var source = findParking(baseData, scheme.sourceId);
+      var target = findParking(baseData, scheme.targetId);
+
+      if (!source || !target) return;
+
+      var div = document.createElement('div');
+      div.className = 'dispatch-item';
+      div.innerHTML =
+        '<strong>方案 ' + scheme.id + '</strong><br>' +
+        '分流源：' + source.name + '<br>' +
+        '推荐目标：' + target.name + '<br>' +
+        '分流车辆数：' + scheme.vehicles + ' 辆　距离：' + scheme.distance;
+
+      list.appendChild(div);
+    });
+  }
+
+  Promise.all([
+    fetch('../json/parking_base.json').then(function(res) {
+      return res.json();
+    }),
+    fetch('../json/parking_prediction_simulated.json').then(function(res) {
+      return res.json();
+    })
+  ]).then(function(result) {
+    var baseData = result[0];
+    var predData = result[1];
+
+    var currentTime = getCurrentTime();
+    var pageMode = getPageMode();
+    var schemesToShow = [];
+
+    if (pageMode === 'all') {
+      schemesToShow = dispatchSchemes;
+      document.getElementById('panel-title').innerText = '智慧停车分流调度总览';
+      document.getElementById('panel-subtitle').innerText =
+        '当前时段：' + currentTime + '。系统展示全部高风险停车场向低风险停车场的动态分流路线。';
+    } else {
+      schemesToShow = dispatchSchemes.filter(function(item) {
+        return item.id === pageMode;
+      });
+
+      document.getElementById('panel-title').innerText = '智慧停车分流方案 ' + pageMode;
+      document.getElementById('panel-subtitle').innerText =
+        '当前时段：' + currentTime + '。本页面展示第 ' + pageMode + ' 条停车分流路线。';
+    }
+
+    var bounds = [];
+
+    schemesToShow.forEach(function(scheme) {
+      drawScheme(scheme, baseData, predData, currentTime, bounds);
+    });
+
+    renderPanel(schemesToShow, baseData);
+
+    if (bounds.length > 0) {
+      map.fitBounds(bounds, {
+        padding: [70, 70]
+      });
+    }
+
+  }).catch(function(error) {
+    console.error('停车调度地图数据加载失败：', error);
+    document.getElementById('dispatch-list').innerHTML =
+      '<div class="dispatch-item">数据加载失败，请检查 json 文件路径是否正确。</div>';
+  });
+</script>
+</body>
+</html>

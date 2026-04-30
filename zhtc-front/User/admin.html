@@ -1,0 +1,1472 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据驱动的短时停车需求预测与动态引导系统-管理端</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
+        :root {
+            --bg-deep: #040d1a;
+            --bg-panel: #071526;
+            --bg-card: #0a1d35;
+            --accent: #00d4ff;
+            --accent2: #0a84ff;
+            --accent3: #00ff9d;
+            --warn-low: #34d399;
+            --warn-mid: #fbbf24;
+            --warn-high: #f87171;
+            --text-pri: #e8f4ff;
+            --text-sec: #7eb8d4;
+            --text-dim: #3a6080;
+            --border: rgba(0, 212, 255, 0.15);
+            --panel-w: 320px;
+        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0 }
+        html, body {
+            width: 100%; height: 100%; overflow: hidden;
+            background: var(--bg-deep); color: var(--text-pri);
+            font-family: 'Noto Sans SC', sans-serif
+        }
+        body::after {
+            content: ''; position: fixed; inset: 0;
+            background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.03) 2px, rgba(0,0,0,.03) 4px);
+            pointer-events: none; z-index: 9999
+        }
+        .shell {
+            display: grid;
+            grid-template-rows: 60px 1fr;
+            grid-template-columns: var(--panel-w) 1fr var(--panel-w);
+            width: 100vw; height: 100vh
+        }
+        /* ── Header ── */
+        .hdr {
+            grid-column: 1/-1; display: flex; align-items: center;
+            justify-content: space-between; padding: 0 18px;
+            background: linear-gradient(90deg, #040d1a 0%, #071e38 35%, #071e38 65%, #040d1a 100%);
+            border-bottom: 1px solid var(--border); position: relative; z-index: 10
+        }
+        .hdr::after {
+            content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+            width: 560px; height: 1px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent)
+        }
+        .hdr-kpi { display: flex; gap: 18px }
+        .kpi-item { display: flex; flex-direction: column }
+        .kpi-label { font-size: 10px; color: var(--text-sec); letter-spacing: .5px; white-space: nowrap }
+        .kpi-value { font-family: 'Orbitron', monospace; font-size: 21px; font-weight: 700; color: #ffd060; line-height: 1.2 }
+        .hdr-title {
+            font-family: 'Orbitron', monospace; font-size: 17px; font-weight: 900;
+            letter-spacing: 2px; color: var(--text-pri);
+            text-shadow: 0 0 24px rgba(0,212,255,.6); text-align: center
+        }
+        .hdr-title small {
+            display: block; font-size: 9px; color: var(--accent);
+            letter-spacing: 5px; font-weight: 400; margin-top: 2px
+        }
+        .hdr-meta { display: flex; align-items: center; gap: 16px }
+        .clock-box { text-align: right }
+        .clock-time { font-family: 'Orbitron', monospace; font-size: 22px; font-weight: 700; color: var(--accent) }
+        .clock-date { font-size: 11px; color: var(--text-sec); margin-top: 1px }
+        .weather-chip {
+            display: flex; align-items: center; gap: 8px;
+            background: rgba(0,212,255,.06); border: 1px solid var(--border);
+            border-radius: 8px; padding: 4px 12px
+        }
+        .weather-chip .wicon { font-size: 22px }
+        .weather-chip .winfo { font-size: 11px; color: var(--text-sec); line-height: 1.5 }
+        .weather-chip .winfo strong { color: var(--text-pri); font-weight: 500 }
+        /* ── Panels ── */
+        .panel-left, .panel-right {
+            background: var(--bg-panel); display: flex;
+            flex-direction: column; overflow: hidden
+        }
+        .panel-left { border-right: 1px solid var(--border) }
+        .panel-right { border-left: 1px solid var(--border) }
+        .panel-center { display: flex; flex-direction: column; background: var(--bg-deep); position: relative; overflow: hidden }
+        .sec-card {
+            flex: 1; display: flex; flex-direction: column;
+            border-bottom: 1px solid var(--border); min-height: 0; overflow: hidden
+        }
+        .sec-card:last-child { border-bottom: none }
+        .sec-hdr {
+            display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+            background: rgba(0,212,255,.04); border-bottom: 1px solid var(--border); flex-shrink: 0
+        }
+        .sec-hdr::before {
+            content: ''; width: 3px; height: 16px;
+            background: linear-gradient(180deg, var(--accent), var(--accent2));
+            border-radius: 2px; flex-shrink: 0
+        }
+        .sec-hdr h6 { font-size: 12px; font-weight: 600; color: var(--text-pri); letter-spacing: .5px; white-space: nowrap }
+        .sec-body { flex: 1; overflow: hidden; padding: 8px 10px; position: relative }
+        .center-head {
+            display: flex; align-items: center; justify-content: center;
+            min-height: 44px; border-bottom: 1px solid var(--border);
+            background: rgba(0,0,0,.25); flex-shrink: 0
+        }
+        .center-head .sub { margin-left: 10px; font-size: 12px; color: var(--accent); letter-spacing: 2px }
+        /* ── Map Wrap ── */
+        .map-wrap { flex: 1; position: relative; overflow: hidden }
+        #map-container { width: 100%; height: 100%; background: #071526 }
+        /* ── Charts ── */
+        #chart-pie, #line_time { width: 100%; height: 100% }
+        /* ── Scheme/Detail tables ── */
+        .scheme-header, .scheme-row {
+            display: grid; grid-template-columns: 96px 1fr 58px;
+            padding: 5px 10px; align-items: center
+        }
+        .scheme-header { font-size: 10px; color: var(--text-dim); letter-spacing: .5px; border-bottom: 1px solid var(--border); flex-shrink: 0 }
+        .scheme-scroll { flex: 1; overflow: hidden; position: relative }
+        .scheme-list { width: 100% }
+        .scheme-row {
+            padding-top: 7px; padding-bottom: 7px;
+            border-bottom: 1px solid rgba(0,212,255,.05);
+            transition: background .15s; cursor: pointer; font-size: 11px
+        }
+        .scheme-row:hover, .scheme-row.active { background: rgba(0,212,255,.08) }
+        .scheme-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+        .scheme-row .from { color: #fbbf24 }
+        .scheme-row .to { color: var(--text-sec); padding: 0 8px }
+        .scheme-row .qty { color: #ffd060; text-align: right }
+        .detail-header, .detail-row {
+            display: grid; grid-template-columns: 70px 1fr 58px 58px;
+            padding: 5px 10px; align-items: center
+        }
+        .detail-header { font-size: 10px; color: var(--text-dim); letter-spacing: .5px; border-bottom: 1px solid var(--border); flex-shrink: 0 }
+        .detail-list { flex: 1; overflow: auto }
+        .detail-row { padding-top: 7px; padding-bottom: 7px; border-bottom: 1px solid rgba(0,212,255,.05); font-size: 11px }
+        .detail-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+        .d-from { color: #fbbf24 }
+        .d-to { color: var(--text-sec); padding: 0 8px }
+        .d-qty, .d-dist { color: #d7ecff; text-align: right }
+        /* ── Risk dots ── */
+        .risk-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px }
+        .low { background: var(--warn-low) }
+        .mid { background: var(--warn-mid) }
+        .high { background: var(--warn-high) }
+        /* ── Corner deco ── */
+        .corner-deco {
+            position: absolute; width: 20px; height: 20px;
+            border-color: var(--accent); border-style: solid;
+            opacity: .5; pointer-events: none; z-index: 500
+        }
+        .c-tl { top: 0; left: 0; border-width: 2px 0 0 2px }
+        .c-tr { top: 0; right: 0; border-width: 2px 2px 0 0 }
+        .c-bl { bottom: 0; left: 0; border-width: 0 0 2px 2px }
+        .c-br { bottom: 0; right: 0; border-width: 0 2px 2px 0 }
+        /* ── Leaflet overrides ── */
+        .leaflet-tooltip-dark {
+            background: rgba(7,21,38,.92); border: 1px solid rgba(0,212,255,.35);
+            color: #e8f4ff; box-shadow: 0 0 14px rgba(0,212,255,.18); font-size: 11px
+        }
+        .map-legend {
+            background: rgba(7,21,38,.86); border: 1px solid rgba(0,212,255,.28);
+            border-radius: 8px; padding: 8px 10px; color: #e8f4ff;
+            font-size: 10px; line-height: 1.8; box-shadow: 0 0 16px rgba(0,212,255,.15)
+        }
+        .map-legend .legend-title { color: #00d4ff; font-weight: 600; margin-bottom: 2px }
+        .map-legend span { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px }
+        /* ── Load error ── */
+        .load-error {
+            position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+            padding: 14px 18px; border: 1px solid rgba(248,113,113,.4);
+            background: rgba(248,113,113,.08); color: #ffd7d7;
+            border-radius: 8px; font-size: 13px; z-index: 800; display: none
+        }
+        /* ── Scrollbar ── */
+        ::-webkit-scrollbar { width: 4px }
+        ::-webkit-scrollbar-track { background: transparent }
+        ::-webkit-scrollbar-thumb { background: var(--text-dim); border-radius: 2px }
+        /* ── Entrance animation ── */
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(10px) }
+            to   { opacity: 1; transform: translateY(0) }
+        }
+        .shell > * { animation: fadeUp .4s ease both }
+        .panel-left  { animation-delay: .05s }
+        .panel-right { animation-delay: .10s }
+
+        /* ══════════════════════════════════════════════════════════════
+           2D / 3D 视角切换 —— CSS 伪 3D 实现
+           原理：对 #map-container 施加 CSS perspective + rotateX 产生
+           倾斜俯视感；叠加扫描线、网格、光晕等纯 CSS 装饰层增强效果。
+           不使用 Mapbox / Cesium / three.js，不调用 Leaflet 不支持的
+           setPitch / setBearing，稳定可靠，适合答辩演示。
+        ══════════════════════════════════════════════════════════════ */
+
+        /* ── 切换按钮组 ── */
+        .map-mode-toggle {
+            position: absolute;
+            top: 12px;
+            right: 14px;
+            z-index: 700;
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        /* 视角标签 */
+        .mode-label {
+            font-size: 10px;
+            color: var(--text-dim);
+            letter-spacing: 1px;
+            font-family: 'Orbitron', monospace;
+            user-select: none;
+        }
+
+        /* 主切换按钮 */
+        #map-mode-btn {
+            position: relative;
+            padding: 6px 16px 6px 34px;
+            background: rgba(4, 13, 26, 0.92);
+            color: var(--accent);
+            border: 1px solid rgba(0, 212, 255, 0.45);
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 700;
+            font-family: 'Orbitron', monospace;
+            letter-spacing: 1.5px;
+            box-shadow: 0 0 14px rgba(0,212,255,0.20), inset 0 0 8px rgba(0,212,255,0.04);
+            transition: all 0.3s ease;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        /* 按钮左侧图标圆 */
+        #map-mode-btn::before {
+            content: '';
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 2px solid var(--accent);
+            transition: all 0.3s ease;
+        }
+        /* 按钮扫光效果 */
+        #map-mode-btn::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -60%;
+            width: 40%;
+            height: 200%;
+            background: linear-gradient(90deg, transparent, rgba(0,212,255,0.15), transparent);
+            transform: skewX(-20deg);
+            transition: left 0.5s ease;
+        }
+        #map-mode-btn:hover::after { left: 130% }
+        #map-mode-btn:hover {
+            box-shadow: 0 0 22px rgba(0,212,255,0.45), inset 0 0 12px rgba(0,212,255,0.08);
+            border-color: rgba(0,212,255,0.8);
+        }
+        /* 激活态：3D 模式开启 */
+        #map-mode-btn.active {
+            background: linear-gradient(135deg, rgba(0,132,255,0.35), rgba(0,212,255,0.25));
+            color: #ffffff;
+            border-color: var(--accent);
+            box-shadow: 0 0 24px rgba(0,212,255,0.55), inset 0 0 16px rgba(0,212,255,0.12);
+        }
+        #map-mode-btn.active::before {
+            background: var(--accent);
+            box-shadow: 0 0 8px var(--accent);
+        }
+
+        /* ── 地图容器：2D 状态（默认） ── */
+        #map-container {
+            transition: transform 0.55s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                        box-shadow 0.55s ease;
+        }
+
+        /* ── 3D 模式：.map-wrap 层 ──
+           perspective 决定透视强度，值越小倾斜感越强 */
+        .map-wrap.map-3d-mode {
+            perspective: 820px;
+            perspective-origin: 50% 40%;
+            background: radial-gradient(ellipse at 50% 60%,
+                rgba(0,212,255,0.10) 0%,
+                rgba(10,40,80,0.35) 45%,
+                rgba(4,13,26,1) 100%);
+        }
+
+        /* ── 3D 模式：地图容器倾斜 ── */
+        .map-wrap.map-3d-mode #map-container {
+            transform: rotateX(46deg) scale(1.14);
+            transform-origin: 50% 55%;
+            box-shadow:
+                0 32px 64px rgba(0,0,0,0.65),
+                0 0 0 1px rgba(0,212,255,0.12),
+                inset 0 0 60px rgba(0,212,255,0.04);
+        }
+
+        /* ── 3D 模式：扫描线覆盖层（纯 CSS 科技感装饰） ── */
+        .map-3d-overlay {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 490;
+            opacity: 0;
+            transition: opacity 0.55s ease;
+        }
+        /* 横向扫描线 */
+        .map-3d-overlay::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 3px,
+                rgba(0,212,255,0.03) 3px,
+                rgba(0,212,255,0.03) 4px
+            );
+        }
+        /* 纵向透视网格辅助线 */
+        .map-3d-overlay::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                90deg,
+                transparent,
+                transparent 59px,
+                rgba(0,212,255,0.025) 59px,
+                rgba(0,212,255,0.025) 60px
+            );
+        }
+        .map-wrap.map-3d-mode .map-3d-overlay {
+            opacity: 1;
+        }
+
+        /* ── 3D 模式：底部光晕（模拟地平线光效） ── */
+        .map-3d-horizon {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 80px;
+            pointer-events: none;
+            z-index: 491;
+            opacity: 0;
+            transition: opacity 0.55s ease;
+            background: linear-gradient(
+                to top,
+                rgba(0,212,255,0.18) 0%,
+                rgba(0,212,255,0.06) 40%,
+                transparent 100%
+            );
+        }
+        .map-wrap.map-3d-mode .map-3d-horizon { opacity: 1 }
+
+        /* ── 3D 模式：顶部渐隐（增强透视遮罩） ── */
+        .map-3d-topfade {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            pointer-events: none;
+            z-index: 491;
+            opacity: 0;
+            transition: opacity 0.55s ease;
+            background: linear-gradient(
+                to bottom,
+                rgba(4,13,26,0.55) 0%,
+                transparent 100%
+            );
+        }
+        .map-wrap.map-3d-mode .map-3d-topfade { opacity: 1 }
+
+        /* ── 3D 模式：侧边光效 ── */
+        .map-3d-sideglow {
+            position: absolute;
+            top: 0; bottom: 0;
+            width: 40px;
+            pointer-events: none;
+            z-index: 491;
+            opacity: 0;
+            transition: opacity 0.55s ease;
+        }
+        .map-3d-sideglow.left {
+            left: 0;
+            background: linear-gradient(to right, rgba(0,212,255,0.10), transparent);
+        }
+        .map-3d-sideglow.right {
+            right: 0;
+            background: linear-gradient(to left, rgba(0,212,255,0.10), transparent);
+        }
+        .map-wrap.map-3d-mode .map-3d-sideglow { opacity: 1 }
+
+        /* ── 3D 模式信息浮层：显示当前视角参数 ── */
+        .view-info-badge {
+            position: absolute;
+            bottom: 14px;
+            right: 14px;
+            z-index: 700;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            opacity: 0;
+            transform: translateY(8px);
+            transition: opacity 0.4s ease 0.2s, transform 0.4s ease 0.2s;
+            pointer-events: none;
+        }
+        .map-wrap.map-3d-mode .view-info-badge {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .view-info-badge .vi-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(4,13,26,0.85);
+            border: 1px solid rgba(0,212,255,0.25);
+            border-radius: 4px;
+            padding: 3px 8px;
+            font-family: 'Orbitron', monospace;
+            font-size: 9px;
+            color: var(--text-sec);
+        }
+        .view-info-badge .vi-label { color: var(--text-dim); }
+        .view-info-badge .vi-val { color: var(--accent); font-weight: 700; }
+
+        /* ── 俯仰角滑块 ── */
+        .pitch-control {
+            position: absolute;
+            left: 14px;
+            bottom: 48px;
+            z-index: 700;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+            opacity: 0;
+            pointer-events: none;
+            transform: translateX(-8px);
+            transition: opacity 0.4s ease 0.15s, transform 0.4s ease 0.15s;
+        }
+        .map-wrap.map-3d-mode .pitch-control {
+            opacity: 1;
+            pointer-events: all;
+            transform: translateX(0);
+        }
+        .pitch-control .pc-label {
+            font-size: 9px;
+            color: var(--text-dim);
+            letter-spacing: 1px;
+            font-family: 'Orbitron', monospace;
+            writing-mode: vertical-rl;
+            transform: rotate(180deg);
+        }
+        .pitch-control input[type=range] {
+            -webkit-appearance: none;
+            appearance: none;
+            writing-mode: vertical-lr;
+            direction: rtl;
+            width: 4px;
+            height: 90px;
+            background: rgba(0,212,255,0.15);
+            border-radius: 2px;
+            outline: none;
+            cursor: pointer;
+        }
+        .pitch-control input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--accent);
+            box-shadow: 0 0 8px var(--accent);
+            cursor: pointer;
+        }
+        .pitch-control .pc-val {
+            font-family: 'Orbitron', monospace;
+            font-size: 9px;
+            color: var(--accent);
+        }
+
+        /* ── 方位角旋转控制 ── */
+        .bearing-control {
+            position: absolute;
+            left: 50px;
+            bottom: 14px;
+            z-index: 700;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(8px);
+            transition: opacity 0.4s ease 0.2s, transform 0.4s ease 0.2s;
+        }
+        .map-wrap.map-3d-mode .bearing-control {
+            opacity: 1;
+            pointer-events: all;
+            transform: translateY(0);
+        }
+        .bearing-control .bc-label {
+            font-size: 9px;
+            color: var(--text-dim);
+            letter-spacing: 1px;
+            font-family: 'Orbitron', monospace;
+        }
+        .bearing-control input[type=range] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100px;
+            height: 4px;
+            background: rgba(0,212,255,0.15);
+            border-radius: 2px;
+            outline: none;
+            cursor: pointer;
+        }
+        .bearing-control input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #fbbf24;
+            box-shadow: 0 0 8px #fbbf24;
+            cursor: pointer;
+        }
+        .bearing-control .bc-val {
+            font-family: 'Orbitron', monospace;
+            font-size: 9px;
+            color: #fbbf24;
+        }
+
+        /* ── 动画：3D 模式进入时扫光一次 ── */
+        @keyframes scanOnce {
+            0%   { top: -100% }
+            100% { top: 110% }
+        }
+        .map-scan-flash {
+            position: absolute;
+            left: 0; right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, rgba(0,212,255,0.7), transparent);
+            z-index: 492;
+            top: -100%;
+            pointer-events: none;
+            opacity: 0;
+        }
+        .map-scan-flash.run {
+            opacity: 1;
+            animation: scanOnce 0.7s ease forwards;
+        }
+
+        /* ── Language switch ── */
+        .lang-toggle {
+            padding: 6px 12px;
+            background: rgba(10, 29, 53, 0.88);
+            color: var(--accent);
+            border: 1px solid rgba(0, 212, 255, 0.45);
+            border-radius: 18px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 700;
+            font-family: 'Orbitron', monospace;
+            box-shadow: 0 0 12px rgba(0,212,255,.18);
+        }
+        .lang-toggle:hover {
+            box-shadow: 0 0 16px rgba(0,212,255,.45);
+            border-color: rgba(0,212,255,.8);
+        }
+
+        /* ── Dispatch plan modal ── */
+        .dispatch-modal {
+            position: absolute;
+            right: 18px;
+            top: 74px;
+            width: 320px;
+            z-index: 900;
+            display: none;
+            background: rgba(7, 21, 38, .96);
+            border: 1px solid rgba(0, 212, 255, .35);
+            border-radius: 10px;
+            box-shadow: 0 0 28px rgba(0, 212, 255, .25);
+            padding: 14px 16px;
+        }
+        .dispatch-modal.show { display: block; }
+        .dispatch-modal h4 {
+            font-size: 14px;
+            color: #00d4ff;
+            margin-bottom: 10px;
+            padding-right: 20px;
+        }
+        .dispatch-modal p {
+            font-size: 12px;
+            color: #d7ecff;
+            line-height: 1.8;
+        }
+        .dispatch-modal b { color: #7ee7ff; font-weight: 600; }
+        .dispatch-modal .close-btn {
+            position: absolute;
+            right: 10px;
+            top: 8px;
+            cursor: pointer;
+            color: #7eb8d4;
+            font-size: 18px;
+            line-height: 1;
+        }
+        .dispatch-modal .close-btn:hover { color: #ffffff; }
+
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <header class="hdr">
+            <div class="hdr-kpi">
+                <div class="kpi-item"><span class="kpi-label" data-i18n="kpiCount">停车场总数</span><span class="kpi-value" id="kpi-count">--</span></div>
+                <div class="kpi-item"><span class="kpi-label" data-i18n="kpiCapacity">总泊位数</span><span class="kpi-value" id="kpi-capacity">--</span></div>
+                <div class="kpi-item"><span class="kpi-label" data-i18n="kpiAvailable">当前可用车位</span><span class="kpi-value" id="kpi-available">--</span></div>
+                <div class="kpi-item"><span class="kpi-label" data-i18n="kpiHighRisk">高风险停车场</span><span class="kpi-value" id="kpi-high-risk">--</span></div>
+            </div>
+            <div class="hdr-title">
+                <span data-i18n="title">数据驱动的短时停车需求预测与动态引导系统</span>
+                <small data-i18n="console">MANAGEMENT CONSOLE</small>
+            </div>
+            <div class="hdr-meta">
+                <select class="lang-toggle" id="lang-toggle">
+                    <option value="zh">中文</option>
+                    <option value="en">English</option>
+                    <option value="yue">粤语</option>
+                    <option value="jp">日本語</option>
+                    <option value="kr">한국어</option>
+                </select>
+                <div class="clock-box">
+                    <div class="clock-time" id="clock">00:00:00</div>
+                    <div class="clock-date" id="clock-date">--</div>
+                </div>
+                <div class="weather-chip">
+                    <span class="wicon">⛅</span>
+                    <div class="winfo"><strong>多云&nbsp;22–26℃</strong><br>深圳市</div>
+                </div>
+            </div>
+        </header>
+
+        <aside class="panel-left">
+            <div class="sec-card" style="flex:0.95">
+                <div class="sec-hdr"><h6 data-i18n="riskChart">停车场拥堵风险分布</h6></div>
+                <div class="sec-body" style="padding:6px"><div id="chart-pie"></div></div>
+            </div>
+            <div class="sec-card" style="flex:1.25">
+                <div class="sec-hdr"><h6 data-i18n="trendChart">总占用量与预测需求趋势</h6></div>
+                <div class="sec-body" style="padding:4px 6px"><div id="line_time"></div></div>
+            </div>
+        </aside>
+
+        <main class="panel-center">
+            <div class="center-head">
+                <div data-i18n="centerTitle">短时停车需求预测与动态引导系统</div>
+                <div class="sub" data-i18n="admin">管理端</div>
+            </div>
+
+            <div class="map-wrap" id="map-wrap">
+                <!-- 装饰角标 -->
+                <div class="corner-deco c-tl"></div>
+                <div class="corner-deco c-tr"></div>
+                <div class="corner-deco c-bl"></div>
+                <div class="corner-deco c-br"></div>
+
+                <!-- CSS 3D 装饰层（扫描线 / 光晕等），不影响地图交互 -->
+                <div class="map-3d-overlay"></div>
+                <div class="map-3d-horizon"></div>
+                <div class="map-3d-topfade"></div>
+                <div class="map-3d-sideglow left"></div>
+                <div class="map-3d-sideglow right"></div>
+                <!-- 进入 3D 时一次性扫光动画 -->
+                <div class="map-scan-flash" id="map-scan-flash"></div>
+
+                <!-- 2D/3D 切换按钮（科技风胶囊样式） -->
+                <div class="map-mode-toggle">
+                    <span class="mode-label" id="mode-label">2D</span>
+                    <button id="map-mode-btn" type="button">3D视角</button>
+                </div>
+
+                <!-- 3D 视角参数信息浮层（答辩演示用，显示当前俯仰/方位角） -->
+                <div class="view-info-badge" id="view-info-badge">
+                    <div class="vi-row">
+                        <span class="vi-label">PITCH</span>
+                        <span class="vi-val" id="vi-pitch">46°</span>
+                    </div>
+                    <div class="vi-row">
+                        <span class="vi-label">BEARING</span>
+                        <span class="vi-val" id="vi-bearing">0°</span>
+                    </div>
+                    <div class="vi-row">
+                        <span class="vi-label">MODE</span>
+                        <span class="vi-val">CSS-3D</span>
+                    </div>
+                </div>
+
+                <!-- 俯仰角控制滑块（仅 3D 模式显示） -->
+                <div class="pitch-control" id="pitch-control">
+                    <span class="pc-label">PITCH</span>
+                    <input type="range" id="pitch-slider" min="20" max="70" value="46" step="1">
+                    <span class="pc-val" id="pc-val">46°</span>
+                </div>
+
+                <!-- 方位角控制滑块（仅 3D 模式显示） -->
+                <div class="bearing-control" id="bearing-control">
+                    <span class="bc-label">BEARING</span>
+                    <input type="range" id="bearing-slider" min="-45" max="45" value="0" step="1">
+                    <span class="bc-val" id="bc-val">0°</span>
+                </div>
+
+                <!-- Leaflet 地图容器 -->
+                <div id="map-container"></div>
+                <div class="dispatch-modal" id="dispatch-modal">
+                    <span class="close-btn" id="dispatch-close">×</span>
+                    <h4 id="dispatch-title">调度方案详情</h4>
+                    <p id="dispatch-content"></p>
+                </div>
+            </div>
+        </main>
+
+        <aside class="panel-right">
+            <div class="sec-card" style="flex:1.3">
+                <div class="sec-hdr"><h6 data-i18n="schemeTitle">停车引导调度方案</h6></div>
+                <div class="scheme-header">
+                    <span data-i18n="crowded">拥堵停车场</span>
+                    <span data-i18n="target">推荐停车场</span>
+                    <span data-i18n="guideQty">引导量</span>
+                </div>
+                <div class="scheme-scroll">
+                    <div class="scheme-list" id="scheme-list"></div>
+                </div>
+            </div>
+            <div class="sec-card" style="flex:0.95">
+                <div class="sec-hdr"><h6 data-i18n="detailTitle">调度明细</h6></div>
+                <div class="detail-header">
+                    <span data-i18n="park">公园</span>
+                    <span data-i18n="parkingName">停车场名称</span>
+                    <span data-i18n="available">剩余</span>
+                    <span data-i18n="risk">风险</span>
+                </div>
+                <div class="detail-list" id="detail-list"></div>
+            </div>
+        </aside>
+    </div>
+
+    <script src="js/jquery-3.3.1.min.js"></script>
+    <script src="js/echarts.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+
+    <script>
+    /* ══════════════════════════════════════════════════════════════════
+       时钟
+    ══════════════════════════════════════════════════════════════════ */
+    (function tick() {
+        var d = new Date();
+        var pad = function(n) { return String(n).padStart(2, '0'); };
+        document.getElementById('clock').textContent =
+            pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+        var wk = ['周日','周一','周二','周三','周四','周五','周六'];
+        document.getElementById('clock-date').textContent =
+            d.getFullYear() + '/' + pad(d.getMonth()+1) + '/' + pad(d.getDate()) +
+            '  ' + (d.getHours() < 12 ? 'AM' : 'PM') + '  ' + wk[d.getDay()];
+        setTimeout(tick, 1000);
+    })();
+
+    /* ══════════════════════════════════════════════════════════════════
+       全局常量 & 工具函数
+    ══════════════════════════════════════════════════════════════════ */
+    var CURRENT_TIME  = '12:00';
+    var DISPATCH_TIME = '18:00';
+    var TIME_LIST     = ['08:00', '12:00', '18:00'];
+    var riskColor     = { '低': '#34d399', '中': '#fbbf24', '高': '#f87171' };
+    var adminMap      = null;
+    var markerMap     = {};
+    var currentLang = 'zh';
+    var currentPlans = [];
+    var currentMergedData = [];
+    var selectedDispatchLine = null;
+    var schemeAutoScrollStarted = false;
+
+    var LANG_TEXT = {
+        zh: {
+            title: '数据驱动的短时停车需求预测与动态引导系统',
+            console: 'MANAGEMENT CONSOLE',
+            centerTitle: '短时停车需求预测与动态引导系统',
+            admin: '管理端',
+            kpiCount: '停车场总数',
+            kpiCapacity: '总泊位数',
+            kpiAvailable: '当前可用车位',
+            kpiHighRisk: '高风险停车场',
+            riskChart: '停车场拥堵风险分布',
+            trendChart: '总占用量与预测需求趋势',
+            schemeTitle: '停车引导调度方案',
+            detailTitle: '调度明细',
+            crowded: '拥堵停车场',
+            target: '推荐停车场',
+            guideQty: '引导量',
+            park: '公园',
+            parkingName: '停车场名称',
+            available: '剩余',
+            risk: '风险',
+            lowRisk: '低风险',
+            midRisk: '中风险',
+            highRisk: '高风险',
+            noHighRisk: '暂无高风险',
+            noDispatch: '当前不需要分流',
+            modalTitle: '调度方案详情',
+            crowdedLot: '拥堵停车场',
+            targetLot: '推荐停车场',
+            guideAmount: '建议引导车辆',
+            crowdedAvailable: '拥堵场剩余车位',
+            targetAvailable: '推荐场剩余车位',
+            dispatchLogic: '调度逻辑',
+            logicText: '将高风险停车场的部分需求引导至剩余车位较多的停车场，缓解局部停车压力。',
+            unit: '个',
+            view3d: '3D视角',
+            view2d: '2D视角'
+        },
+        en: {
+            title: 'Data-driven Short-term Parking Demand Prediction and Dynamic Guidance System',
+            console: 'MANAGEMENT CONSOLE',
+            centerTitle: 'Parking Demand Prediction and Dynamic Guidance System',
+            admin: 'Admin',
+            kpiCount: 'Parking Lots',
+            kpiCapacity: 'Total Spaces',
+            kpiAvailable: 'Available Spaces',
+            kpiHighRisk: 'High-risk Lots',
+            riskChart: 'Parking Congestion Risk Distribution',
+            trendChart: 'Occupancy and Demand Forecast Trend',
+            schemeTitle: 'Parking Guidance Dispatch Plan',
+            detailTitle: 'Dispatch Details',
+            crowded: 'Crowded Lot',
+            target: 'Recommended Lot',
+            guideQty: 'Guide Qty',
+            park: 'Park',
+            parkingName: 'Parking Lot',
+            available: 'Available',
+            risk: 'Risk',
+            lowRisk: 'Low Risk',
+            midRisk: 'Medium Risk',
+            highRisk: 'High Risk',
+            noHighRisk: 'No High Risk',
+            noDispatch: 'No diversion needed',
+            modalTitle: 'Dispatch Plan Details',
+            crowdedLot: 'Crowded Lot',
+            targetLot: 'Recommended Lot',
+            guideAmount: 'Suggested Guidance',
+            crowdedAvailable: 'Crowded Lot Available',
+            targetAvailable: 'Target Lot Available',
+            dispatchLogic: 'Logic',
+            logicText: 'Guide part of the demand from the high-risk parking lot to a parking lot with more available spaces.',
+            unit: 'spaces',
+            view3d: '3D View',
+            view2d: '2D View'
+        },
+        yue: {
+            title: '數據驅動嘅短時泊車需求預測同動態引導系統',
+            console: 'MANAGEMENT CONSOLE',
+            centerTitle: '短時泊車需求預測同動態引導系統',
+            admin: '管理端',
+            kpiCount: '停車場總數',
+            kpiCapacity: '總泊位數',
+            kpiAvailable: '目前可用車位',
+            kpiHighRisk: '高風險停車場',
+            riskChart: '停車場擁堵風險分佈',
+            trendChart: '總佔用量同預測需求趨勢',
+            schemeTitle: '泊車引導調度方案',
+            detailTitle: '調度明細',
+            crowded: '擁堵停車場',
+            target: '推薦停車場',
+            guideQty: '引導量',
+            park: '公園',
+            parkingName: '停車場名稱',
+            available: '剩餘',
+            risk: '風險',
+            lowRisk: '低風險',
+            midRisk: '中風險',
+            highRisk: '高風險',
+            noHighRisk: '暫無高風險',
+            noDispatch: '目前唔需要分流',
+            modalTitle: '調度方案詳情',
+            crowdedLot: '擁堵停車場',
+            targetLot: '推薦停車場',
+            guideAmount: '建議引導車輛',
+            crowdedAvailable: '擁堵場剩餘車位',
+            targetAvailable: '推薦場剩餘車位',
+            dispatchLogic: '調度邏輯',
+            logicText: '將高風險停車場部分需求引導去剩餘車位較多嘅停車場。',
+            unit: '個',
+            view3d: '3D視角',
+            view2d: '2D視角'
+        },
+        jp: {
+            title: 'データ駆動型短時間駐車需要予測と動的誘導システム',
+            console: 'MANAGEMENT CONSOLE',
+            centerTitle: '駐車需要予測と動的誘導システム',
+            admin: '管理画面',
+            kpiCount: '駐車場数',
+            kpiCapacity: '総駐車枠',
+            kpiAvailable: '現在の空き枠',
+            kpiHighRisk: '高リスク駐車場',
+            riskChart: '駐車場混雑リスク分布',
+            trendChart: '占有台数と予測需要の推移',
+            schemeTitle: '駐車誘導計画',
+            detailTitle: '誘導詳細',
+            crowded: '混雑駐車場',
+            target: '推奨駐車場',
+            guideQty: '誘導数',
+            park: '公園',
+            parkingName: '駐車場名',
+            available: '空き',
+            risk: 'リスク',
+            lowRisk: '低リスク',
+            midRisk: '中リスク',
+            highRisk: '高リスク',
+            noHighRisk: '高リスクなし',
+            noDispatch: '現在分流不要',
+            modalTitle: '誘導計画詳細',
+            crowdedLot: '混雑駐車場',
+            targetLot: '推奨駐車場',
+            guideAmount: '推奨誘導台数',
+            crowdedAvailable: '混雑側空き枠',
+            targetAvailable: '推奨側空き枠',
+            dispatchLogic: '誘導ロジック',
+            logicText: '高リスク駐車場の一部需要を空き枠の多い駐車場へ誘導します。',
+            unit: '台',
+            view3d: '3D表示',
+            view2d: '2D表示'
+        },
+        kr: {
+            title: '데이터 기반 단기 주차 수요 예측 및 동적 안내 시스템',
+            console: 'MANAGEMENT CONSOLE',
+            centerTitle: '주차 수요 예측 및 동적 안내 시스템',
+            admin: '관리자',
+            kpiCount: '주차장 수',
+            kpiCapacity: '총 주차면',
+            kpiAvailable: '현재 빈 자리',
+            kpiHighRisk: '고위험 주차장',
+            riskChart: '주차장 혼잡 위험 분포',
+            trendChart: '점유량 및 예측 수요 추세',
+            schemeTitle: '주차 안내 배차 계획',
+            detailTitle: '배차 상세',
+            crowded: '혼잡 주차장',
+            target: '추천 주차장',
+            guideQty: '안내량',
+            park: '공원',
+            parkingName: '주차장명',
+            available: '잔여',
+            risk: '위험',
+            lowRisk: '저위험',
+            midRisk: '중위험',
+            highRisk: '고위험',
+            noHighRisk: '고위험 없음',
+            noDispatch: '현재 분산 불필요',
+            modalTitle: '배차 계획 상세',
+            crowdedLot: '혼잡 주차장',
+            targetLot: '추천 주차장',
+            guideAmount: '권장 안내 차량',
+            crowdedAvailable: '혼잡장 잔여 자리',
+            targetAvailable: '추천장 잔여 자리',
+            dispatchLogic: '배차 로직',
+            logicText: '고위험 주차장의 일부 수요를 여유 공간이 많은 주차장으로 안내합니다.',
+            unit: '대',
+            view3d: '3D 보기',
+            view2d: '2D 보기'
+        }
+    };
+
+        function T(key) {
+            return (LANG_TEXT[currentLang] && LANG_TEXT[currentLang][key]) || key;
+        }
+
+        function getRiskText(risk) {
+            if (currentLang === 'zh') return risk + '风险';
+            if (risk === '高') return T('highRisk');
+            if (risk === '中') return T('midRisk');
+            return T('lowRisk');
+        }
+
+        function applyLanguage() {
+            var langMap = {
+                zh: 'zh-CN',
+                en: 'en',
+                yue: 'zh-HK',
+                jp: 'ja',
+                kr: 'ko'
+            };
+
+            document.documentElement.lang = langMap[currentLang] || 'zh-CN';
+            document.title = T('title') + '-' + T('admin');
+
+            document.querySelectorAll('[data-i18n]').forEach(function(el) {
+                var key = el.getAttribute('data-i18n');
+                el.textContent = T(key);
+            });
+
+            var modeBtn = document.getElementById('map-mode-btn');
+            var modeLabel = document.getElementById('mode-label');
+
+            if (modeBtn && modeLabel) {
+                if (modeLabel.textContent === '3D') {
+                    modeBtn.textContent = T('view2d');
+                } else {
+                    modeBtn.textContent = T('view3d');
+                }
+            }
+
+            document.getElementById('dispatch-title').textContent = T('modalTitle');
+
+            if (currentMergedData.length) {
+                initSchemeAndDetail(currentMergedData);
+            }
+        }
+
+
+    function sum(arr, key) {
+        return arr.reduce(function(t, i) { return t + Number(i[key] || 0); }, 0);
+    }
+    function byTime(data, time) {
+        return data.filter(function(i) { return i.time === time; });
+    }
+    function findBase(baseData, id) {
+        return baseData.find(function(i) { return Number(i.id) === Number(id); });
+    }
+    function shortName(name) {
+        return String(name || '')
+            .replace('深圳湾公园-','').replace('深圳湾公园','')
+            .replace('海滨生态公园','').replace('停车场','').replace('公园','');
+    }
+    function mergeData(baseData, predData) {
+        return predData.map(function(pred) {
+            var base = findBase(baseData, pred.parking_id);
+            if (!base) return null;
+            return Object.assign({}, pred, {
+                id: base.id, name: base.name, park: base.park,
+                capacity: Number(base.capacity || 0),
+                lat: Number(base.lat), lng: Number(base.lng)
+            });
+        }).filter(Boolean);
+    }
+    function calcGuideQty(crowded, target) {
+        var overflow  = Math.max(0, Number(crowded.prediction||0) - Number(crowded.capacity||0));
+        var pressure  = Math.max(5, Math.round(Number(crowded.occupied||0) * 0.08));
+        var receiver  = Math.max(1, Math.round(Number(target.available||0) * 0.25));
+        return Math.max(1, Math.min(receiver, overflow + pressure));
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+       KPI
+    ══════════════════════════════════════════════════════════════════ */
+    function initKpi(baseData, mergedData) {
+        var cur = byTime(mergedData, CURRENT_TIME);
+        document.getElementById('kpi-count').textContent     = baseData.length;
+        document.getElementById('kpi-capacity').textContent  = sum(baseData, 'capacity');
+        document.getElementById('kpi-available').textContent = sum(cur, 'available');
+        document.getElementById('kpi-high-risk').textContent =
+            cur.filter(function(i) { return i.risk === '高'; }).length;
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+       Charts
+    ══════════════════════════════════════════════════════════════════ */
+    function initCharts(mergedData) {
+        if (typeof echarts === 'undefined') return;
+        var cur = byTime(mergedData, CURRENT_TIME);
+        var rc  = { '低': 0, '中': 0, '高': 0 };
+        cur.forEach(function(i) { rc[i.risk] = (rc[i.risk] || 0) + 1; });
+
+        var pie = echarts.init(document.getElementById('chart-pie'));
+        pie.setOption({
+            tooltip: { trigger:'item', backgroundColor:'rgba(4,13,26,.9)',
+                borderColor:'rgba(0,212,255,.3)', textStyle:{ color:'#e8f4ff', fontSize:11 } },
+            legend: { bottom:0, textStyle:{ color:'rgba(200,230,255,.65)', fontSize:10 } },
+            series: [{
+                name:'停车场拥堵风险分布', type:'pie',
+                radius:['38%','68%'], center:['50%','42%'],
+                label:{ color:'#d7ecff', fontSize:10 },
+                data:[
+                    { value:rc['高'], name:'高风险', itemStyle:{ color:'#f87171' } },
+                    { value:rc['中'], name:'中风险', itemStyle:{ color:'#fbbf24' } },
+                    { value:rc['低'], name:'低风险', itemStyle:{ color:'#34d399' } }
+                ]
+            }]
+        });
+
+        var totalOccupied    = TIME_LIST.map(function(t){ return sum(byTime(mergedData,t),'occupied'); });
+        var totalPrediction  = TIME_LIST.map(function(t){ return sum(byTime(mergedData,t),'prediction'); });
+        var line = echarts.init(document.getElementById('line_time'));
+        line.setOption({
+            tooltip:{ trigger:'axis', backgroundColor:'rgba(4,13,26,.9)',
+                borderColor:'rgba(0,212,255,.3)', textStyle:{ color:'#e8f4ff', fontSize:11 } },
+            legend:{ top:2, data:['总占用量','预测需求'],
+                textStyle:{ color:'rgba(200,230,255,.65)', fontSize:10 } },
+            grid:{ left:42, right:16, top:30, bottom:30 },
+            xAxis:[{ type:'category', data:TIME_LIST,
+                axisLabel:{ color:'rgba(126,184,212,.75)', fontSize:10 },
+                axisLine:{ lineStyle:{ color:'rgba(0,212,255,.12)' } } }],
+            yAxis:[{ type:'value', axisTick:{ show:false }, axisLine:{ show:false },
+                axisLabel:{ color:'rgba(126,184,212,.65)', fontSize:10 },
+                splitLine:{ lineStyle:{ color:'rgba(0,212,255,.07)' } } }],
+            series:[
+                { name:'总占用量', type:'line', smooth:true, symbol:'circle', symbolSize:5,
+                  lineStyle:{ color:'#0BE3FF', width:2 }, itemStyle:{ color:'#0BE3FF' }, data:totalOccupied },
+                { name:'预测需求', type:'line', smooth:true, symbol:'circle', symbolSize:5,
+                  lineStyle:{ color:'#f0c725', width:2 }, itemStyle:{ color:'#f0c725' }, data:totalPrediction }
+            ]
+        });
+        window.addEventListener('resize', function() { pie.resize(); line.resize(); });
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+       Scheme & Detail
+    ══════════════════════════════════════════════════════════════════ */
+    function buildDispatchPlans(mergedData) {
+        var d = byTime(mergedData, DISPATCH_TIME);
+        var crowded  = d.filter(function(i){ return i.risk === '高'; });
+        var receiver = d.filter(function(i){ return i.risk==='低'||i.risk==='中'; })
+                        .sort(function(a,b){ return Number(b.available)-Number(a.available); });
+        if (!receiver.length) receiver = d.slice().sort(function(a,b){ return Number(b.available)-Number(a.available); });
+        return crowded.map(function(c,idx){
+            var t = receiver[idx % receiver.length] || c;
+            return { crowded:c, target:t, qty:calcGuideQty(c,t) };
+        });
+    }
+
+        function initSchemeAndDetail(mergedData) {
+            currentMergedData = mergedData;
+            var schemeList = document.getElementById('scheme-list');
+            var detailList = document.getElementById('detail-list');
+            schemeList.innerHTML = '';
+            detailList.innerHTML = '';
+            schemeList.style.transform = 'translateY(0px)';
+
+            currentPlans = buildDispatchPlans(mergedData);
+            if (currentPlans.length === 0) {
+                var empty = document.createElement('div');
+                empty.className = 'scheme-row';
+                empty.innerHTML = '<span class="from">' + T('noHighRisk') + '</span><span class="to">' + T('noDispatch') + '</span><span class="qty">0' + T('unit') + '</span>';
+                schemeList.appendChild(empty);
+            }
+
+            currentPlans.forEach(function(plan, idx) {
+                var row = document.createElement('div');
+                row.className = 'scheme-row' + (idx === 0 ? ' active' : '');
+                row.dataset.index = idx;
+                row.dataset.parkingId = plan.crowded.parking_id;
+                row.innerHTML = '<span class="from" title="' + plan.crowded.name +
+                    '"><i class="risk-dot high"></i>' + shortName(plan.crowded.name) + '</span>' +
+                    '<span class="to" title="' + plan.target.name + '">' + plan.target.name + '</span>' +
+                    '<span class="qty">' + plan.qty + T('unit') + '</span>';
+                schemeList.appendChild(row);
+            });
+
+            var detailData = byTime(mergedData, CURRENT_TIME).slice().sort(function(a, b) {
+                var rank = { '高': 3, '中': 2, '低': 1 };
+                return rank[b.risk] - rank[a.risk] || Number(a.available) - Number(b.available);
+            });
+            detailData.forEach(function(item) {
+                var row = document.createElement('div');
+                row.className = 'detail-row';
+                row.innerHTML = '<span class="d-from" title="' + item.park + '">' + item.park + '</span>' +
+                    '<span class="d-to" title="' + item.name + '">' + item.name + '</span>' +
+                    '<span class="d-qty">' + item.available + '</span>' +
+                    '<span class="d-dist" style="color:' + riskColor[item.risk] + '">' + getRiskText(item.risk) + '</span>';
+                detailList.appendChild(row);
+            });
+
+            schemeList.onclick = function(e) {
+                var row = e.target.closest('.scheme-row');
+                if (!row || row.dataset.index === undefined) return;
+                document.querySelectorAll('.scheme-row').forEach(function(r) { r.classList.remove('active'); });
+                row.classList.add('active');
+                var plan = currentPlans[Number(row.dataset.index)];
+                showDispatchPlan(plan);
+            };
+
+            if (!schemeAutoScrollStarted) {
+                schemeAutoScrollStarted = true;
+                (function autoScroll() {
+                    var offset = 0,
+                        rowH = 34;
+                    setInterval(function() {
+                        if (!schemeList.firstElementChild || schemeList.children.length < 7) return;
+                        offset += 1;
+                        if (offset >= rowH) {
+                            offset = 0;
+                            schemeList.appendChild(schemeList.firstElementChild);
+                        }
+                        schemeList.style.transform = 'translateY(-' + offset + 'px)';
+                    }, 40);
+                })();
+            }
+        }
+
+function showDispatchPlan(plan) {
+            if (!plan) return;
+            var crowded = plan.crowded;
+            var target = plan.target;
+
+            if (adminMap) {
+                adminMap.setView([crowded.lat, crowded.lng], 15);
+                if (selectedDispatchLine) adminMap.removeLayer(selectedDispatchLine);
+                selectedDispatchLine = L.polyline([
+                    [crowded.lat, crowded.lng],
+                    [target.lat, target.lng]
+                ], {
+                    color: '#00d4ff',
+                    weight: 3,
+                    opacity: 0.9,
+                    dashArray: '8, 8'
+                }).addTo(adminMap);
+            }
+
+            if (markerMap[crowded.parking_id]) markerMap[crowded.parking_id].openPopup();
+
+            document.getElementById('dispatch-title').textContent = T('modalTitle');
+            document.getElementById('dispatch-content').innerHTML =
+                '<b>' + T('crowdedLot') + '：</b>' + crowded.name + '<br>' +
+                '<b>' + T('targetLot') + '：</b>' + target.name + '<br>' +
+                '<b>' + T('guideAmount') + '：</b>' + plan.qty + ' ' + T('unit') + '<br>' +
+                '<b>' + T('crowdedAvailable') + '：</b>' + crowded.available + ' ' + T('unit') + '<br>' +
+                '<b>' + T('targetAvailable') + '：</b>' + target.available + ' ' + T('unit') + '<br>' +
+                '<b>' + T('dispatchLogic') + '：</b>' + T('logicText');
+            document.getElementById('dispatch-modal').classList.add('show');
+        }
+
+    /* ══════════════════════════════════════════════════════════════════
+       Map + 2D/3D 切换
+       ──────────────────────────────────────────────────────────────
+       实现说明（CSS 伪 3D，适合答辩演示）：
+         · 不使用 Mapbox、Cesium、three.js 等外部三维引擎
+         · 不调用 map.setPitch() / map.setBearing()（原生 Leaflet 不支持）
+         · 通过给 .map-wrap 施加 CSS perspective，并对 #map-container
+           应用 rotateX + scale 产生俯视倾斜效果
+         · 俯仰角 (pitch) 和方位角 (bearing) 均通过 CSS transform 实时更新
+         · 切换完成后调用 adminMap.invalidateSize() 修复 Leaflet 瓦片渲染
+    ══════════════════════════════════════════════════════════════════ */
+    function initMap(baseData, mergedData) {
+        var cur = byTime(mergedData, CURRENT_TIME);
+        var pts = cur.filter(function(i){ return !isNaN(i.lat) && !isNaN(i.lng); });
+
+        var cLat = pts.length ? pts.reduce(function(s,x){ return s+x.lat; },0)/pts.length : 22.5355;
+        var cLng = pts.length ? pts.reduce(function(s,x){ return s+x.lng; },0)/pts.length : 113.9350;
+
+        adminMap = L.map('map-container', { zoomControl:false, minZoom:10, maxZoom:18 })
+                    .setView([cLat, cLng], 12);
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            maxZoom:19, attribution:''
+        }).addTo(adminMap);
+        L.control.zoom({ position:'bottomright' }).addTo(adminMap);
+
+        /* 热力层 */
+        var heatPts = [];
+        pts.forEach(function(item) {
+            var bw = item.risk==='高' ? 1.15 : (item.risk==='中' ? 0.78 : 0.42);
+            heatPts.push([item.lat, item.lng, Math.max(bw, Number(item.occupancy_rate||0))]);
+            for (var i=0; i<22; i++) {
+                heatPts.push([
+                    item.lat + (Math.random()-.5)*0.012,
+                    item.lng + (Math.random()-.5)*0.014,
+                    Math.min(1.25, bw*(0.35+Math.random()*0.55))
+                ]);
+            }
+        });
+        if (L.heatLayer && heatPts.length) {
+            L.heatLayer(heatPts, {
+                radius:14, blur:10, maxZoom:16, max:1.25,
+                gradient:{ 0.20:'#2bffb0', 0.42:'#ffdd44', 0.62:'#ffaa33', 0.82:'#ff5e2c', 1.00:'#ff1e1e' }
+            }).addTo(adminMap);
+        }
+
+        /* 风险点位 */
+        pts.forEach(function(item) {
+            var color  = riskColor[item.risk] || '#00d4ff';
+            var marker = L.circleMarker([item.lat, item.lng], {
+                radius: item.risk==='高' ? 8 : 6,
+                fillColor: color, color: '#fff', weight: 1.2, opacity: 1, fillOpacity: 0.9
+            }).addTo(adminMap);
+            marker.bindTooltip(
+                item.name + '<br>' +
+                T('available') + '：' + item.available + ' ' + T('unit') + '<br>' +
+                T('risk') + '：' + getRiskText(item.risk),
+                { sticky:true, className:'leaflet-tooltip-dark' }
+            );
+            marker.bindPopup(
+                '<b>' + item.name + '</b><br>' +
+                T('park') + '：' + item.park + '<br>' +
+                T('kpiCapacity') + '：' + item.capacity + '<br>' +
+                '当前占用：' + item.occupied + '<br>' +
+                T('available') + '：' + item.available + ' ' + T('unit') + '<br>' +
+                '预测需求：' + item.prediction + '<br>' +
+                T('risk') + '：' + getRiskText(item.risk)
+            );
+            markerMap[item.parking_id] = marker;
+        });
+
+        /* 装饰光点 */
+        for (var k=0; k<120; k++) {
+            L.circleMarker([
+                22.455 + Math.random()*0.16,
+                113.855 + Math.random()*0.27
+            ], {
+                radius: 1.5+Math.random()*2.2, fillColor:'#8fd6ff',
+                color:'none', fillOpacity: 0.25+Math.random()*0.25
+            }).addTo(adminMap);
+        }
+
+        /* 图例 */
+        var legend = L.control({ position:'bottomleft' });
+        legend.onAdd = function() {
+            var div = L.DomUtil.create('div', 'map-legend');
+            div.innerHTML =
+                '<div class="legend-title">停车饱和度热力</div>'+
+                '<div><span style="background:#34d399"></span>低风险</div>'+
+                '<div><span style="background:#fbbf24"></span>中风险</div>'+
+                '<div><span style="background:#f87171"></span>高风险</div>';
+            return div;
+        };
+        legend.addTo(adminMap);
+
+        /* ──────────────────────────────────────────────────────────
+           2D / 3D 切换核心逻辑
+           ──────────────────────────────────────────────────────── */
+        var mapWrap    = document.getElementById('map-wrap');
+        var mapCon     = document.getElementById('map-container');
+        var modeBtn    = document.getElementById('map-mode-btn');
+        var modeLabel  = document.getElementById('mode-label');
+        var scanFlash  = document.getElementById('map-scan-flash');
+        var pitchSlider   = document.getElementById('pitch-slider');
+        var bearingSlider = document.getElementById('bearing-slider');
+        var pcVal  = document.getElementById('pc-val');
+        var bcVal  = document.getElementById('bc-val');
+        var viPitch   = document.getElementById('vi-pitch');
+        var viBearing = document.getElementById('vi-bearing');
+
+        var is3D    = false;
+        var pitch   = 46;   /* 俯仰角：20° ~ 70° */
+        var bearing = 0;    /* 方位角：-45° ~ 45° */
+
+        /* 将 pitch / bearing 应用到 CSS transform */
+        function applyTransform() {
+            if (!is3D) {
+                mapCon.style.transform = '';
+                mapCon.style.transformOrigin = '';
+                return;
+            }
+            /* rotateX 控制倾斜，rotateZ 控制偏转（方位角），scale 补偿视野 */
+            var scale = 1.10 + (pitch - 20) / 200;
+            mapCon.style.transformOrigin = '50% 55%';
+            mapCon.style.transform =
+                'rotateX(' + pitch + 'deg) rotateZ(' + bearing + 'deg) scale(' + scale + ')';
+            /* 同步信息浮层数字 */
+            viPitch.textContent   = pitch + '°';
+            viBearing.textContent = bearing + '°';
+            pcVal.textContent     = pitch + '°';
+            bcVal.textContent     = bearing + '°';
+        }
+
+        /* 扫光动画（进入 3D 时触发一次） */
+        function triggerScanFlash() {
+            scanFlash.classList.remove('run');
+            /* 强制重排后再加 class，确保动画每次都能触发 */
+            void scanFlash.offsetWidth;
+            scanFlash.classList.add('run');
+            setTimeout(function() { scanFlash.classList.remove('run'); }, 800);
+        }
+
+        /* 切换 2D / 3D */
+        function toggleMode() {
+            is3D = !is3D;
+
+            if (is3D) {
+                mapWrap.classList.add('map-3d-mode');
+                modeBtn.classList.add('active');
+                modeBtn.textContent = T('view2d');
+                modeLabel.textContent = '3D';
+                triggerScanFlash();
+                applyTransform();
+            } else {
+                mapWrap.classList.remove('map-3d-mode');
+                modeBtn.classList.remove('active');
+                modeBtn.textContent = T('view3d');
+                modeLabel.textContent = '2D';
+                applyTransform();
+                /* 重置滑块 */
+                pitch = 46; bearing = 0;
+                pitchSlider.value   = pitch;
+                bearingSlider.value = bearing;
+                pcVal.textContent   = pitch + '°';
+                bcVal.textContent   = bearing + '°';
+                viPitch.textContent   = pitch + '°';
+                viBearing.textContent = bearing + '°';
+            }
+
+            /* transition 结束后重新计算 Leaflet 地图尺寸，防止瓦片空白 */
+            setTimeout(function() {
+                if (adminMap) adminMap.invalidateSize();
+            }, 600);
+        }
+
+        /* 俯仰角滑块 */
+        pitchSlider.addEventListener('input', function() {
+            pitch = Number(this.value);
+            applyTransform();
+        });
+
+        /* 方位角滑块 */
+        bearingSlider.addEventListener('input', function() {
+            bearing = Number(this.value);
+            applyTransform();
+        });
+
+        /* 主切换按钮 */
+        modeBtn.addEventListener('click', toggleMode);
+
+        document.getElementById('lang-toggle').addEventListener('change', function() {
+            currentLang = this.value;
+            applyLanguage();
+        });
+
+        document.getElementById('dispatch-close').addEventListener('click', function() {
+            document.getElementById('dispatch-modal').classList.remove('show');
+        });
+
+        /* 键盘快捷键：空格键切换（答辩演示方便） */
+        document.addEventListener('keydown', function(e) {
+            if (e.code === 'Space' && e.target.tagName !== 'INPUT') {
+                e.preventDefault();
+                toggleMode();
+            }
+        });
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+       入口
+    ══════════════════════════════════════════════════════════════════ */
+    function initAdminPage(baseData, predData) {
+        var merged = mergeData(baseData, predData);
+        initKpi(baseData, merged);
+        initCharts(merged);
+        initSchemeAndDetail(merged);
+        initMap(baseData, merged);
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        Promise.all([
+            fetch('./json/parking_base.json').then(function(r){ if(!r.ok) throw new Error('parking_base.json 加载失败'); return r.json(); }),
+            fetch('./json/parking_prediction_simulated.json').then(function(r){ if(!r.ok) throw new Error('parking_prediction_simulated.json 加载失败'); return r.json(); })
+        ]).then(function(result) {
+            initAdminPage(result[0], result[1]);
+            applyLanguage();
+        }).catch(function(err) {
+            console.error('管理端数据加载失败：', err);
+            document.getElementById('load-error').style.display = 'block';
+        });
+    });
+    </script>
+</body>
+</html>
